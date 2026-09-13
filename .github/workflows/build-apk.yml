@@ -41,18 +41,43 @@ jobs:
           mkdir project
           unzip -q PROJETO-SHOPEE-ANALYZER.zip -d project
 
-      - name: Compilar APK
+      - name: Compilar APK e salvar log completo
+        id: compile
         working-directory: project
-        run: gradle :app:assembleDebug --stacktrace
+        shell: bash
+        run: |
+          set +e
+          gradle :app:assembleDebug --stacktrace --info --console=plain > build-log.txt 2>&1
+          EXIT_CODE=$?
+          cat build-log.txt
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Disponibilizar log da compilação
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LOG-COMPILACAO
+          path: project/build-log.txt
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Renomear APK
+        if: steps.compile.outputs.exit_code == '0'
         run: |
           cp project/app/build/outputs/apk/debug/app-debug.apk Shopee-Analyzer-Mobile.apk
 
       - name: Disponibilizar APK
+        if: steps.compile.outputs.exit_code == '0'
         uses: actions/upload-artifact@v4
         with:
           name: Shopee-Analyzer-Mobile-APK
           path: Shopee-Analyzer-Mobile.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Marcar compilação como falha
+        if: steps.compile.outputs.exit_code != '0'
+        run: |
+          echo "A compilação falhou. Baixe o artifact LOG-COMPILACAO e envie o build-log.txt."
+          exit 1
